@@ -1,6 +1,5 @@
 package ru.kpfu.itis.servlet.post;
 
-
 import ru.kpfu.itis.model.Account;
 import ru.kpfu.itis.model.Post;
 import ru.kpfu.itis.service.AccountService;
@@ -11,24 +10,23 @@ import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.MultipartConfig;
 import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.Part;
-import java.io.*;
+import javax.servlet.http.*;
+import java.io.IOException;
 import java.util.Date;
+import java.util.UUID;
 
 @MultipartConfig
 @WebServlet("/create")
 public class PostCreateServlet extends HttpServlet {
-    AccountService accountService;
-    PostService postService;
+
+    private PostService postService;
+    private AccountService accountService;
 
     @Override
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
-        accountService = (AccountService) getServletContext().getAttribute("accountService");
         postService = (PostService) getServletContext().getAttribute("postService");
+        accountService = (AccountService) getServletContext().getAttribute("accountService");
     }
 
     @Override
@@ -41,18 +39,35 @@ public class PostCreateServlet extends HttpServlet {
         req.setCharacterEncoding("UTF-8");
         resp.setCharacterEncoding("UTF-8");
 
-        Date dateOfPublication = new Date();
         String title = req.getParameter("title");
         String content = req.getParameter("content");
         Part image = req.getPart("image");
         Account author = accountService.getCurrentAccount(req);
+        Date dateOfCreation = new Date();
 
-        String[] file = image.getSubmittedFileName().split("\\.");
-        String fileName = file[0] + "-author-" + author.uuid().toString() + "." + file[1];
-        Post post = new Post(null, author, title, content,
-                ImageUtil.makeFile(image, fileName, req), dateOfPublication);
-        postService.save(post);
-        resp.sendRedirect(getServletContext().getContextPath() + "/posts/list");
+        String imageName = null;
 
+        if (image != null && image.getSubmittedFileName() != null && !image.getSubmittedFileName().isEmpty()) {
+            String[] fileParts = image.getSubmittedFileName().split("\\.");
+            if (fileParts.length > 1) {
+                String fileExtension = fileParts[fileParts.length - 1];
+                String baseName = String.join(".", java.util.Arrays.copyOf(fileParts, fileParts.length - 1));
+                String fileName = baseName + "-author-" + author.uuid().toString() + "." + fileExtension;
+                imageName = ImageUtil.makeFile(image, fileName, req);
+            }
+        }
+
+        // Генерация нового UUID для поста
+        UUID postUuid = UUID.randomUUID();
+
+        Post post = new Post(postUuid, author, title, content, imageName, dateOfCreation);
+
+        try {
+            postService.save(post);
+            resp.sendRedirect(getServletContext().getContextPath() + "/profile");
+        } catch (Exception e) {
+            req.setAttribute("error", "Не удалось сохранить пост");
+            req.getRequestDispatcher("/WEB-INF/view/posts/createPost.jsp").forward(req, resp);
+        }
     }
 }

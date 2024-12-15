@@ -2,6 +2,7 @@ package ru.kpfu.itis.dao.impl;
 
 import ru.kpfu.itis.dao.AccountDao;
 import ru.kpfu.itis.dao.PostDao;
+import ru.kpfu.itis.model.Account;
 import ru.kpfu.itis.model.Post;
 import ru.kpfu.itis.util.ConnectionProvider;
 import ru.kpfu.itis.util.DbException;
@@ -20,9 +21,12 @@ public class PostDaoImpl implements PostDao {
     private AccountDao accountDao;
 
     //language=sql
-    final String SQL_SAVE = "insert into post(author_uuid, date_of_publication, title, content, image) " +
-            "values(cast(? as uuid), cast(? as date), ?, ?, ?)";
+//    final String SQL_SAVE = "insert into post(author_uuid, date, title, content, image) " +
+//            "values(?, ?, ?, ?, ?)";
 
+    // Обновлённый SQL-запрос с включением поля uuid
+    final String SQL_SAVE = "INSERT INTO post(uuid, author_uuid, date, title, content, image) " +
+            "VALUES(?, ?, ?, ?, ?, ?)";
     //language=sql
     final String SQL_GET_ALL = "select * from post";
 
@@ -37,11 +41,11 @@ public class PostDaoImpl implements PostDao {
 
     //language=sql
     final String SQL_UPDATE_WITHOUT_IMAGE = "update post set title = ?, content = ?, " +
-            "date_of_publication = cast(? as date) where uuid = cast(? as uuid)";
+            "date = cast(? as date) where uuid = cast(? as uuid)";
 
     //language=sql
     final String SQL_UPDATE = "update post set title = ?, content = ?, image = ?, " +
-            "date_of_publication = cast(? as date) where uuid = cast(? as uuid)";
+            "date = cast(? as date) where uuid = cast(? as uuid)";
 
     //language=sql
     final String SQL_DELETE_BY_ID = "delete from post where uuid = cast(? as uuid)";
@@ -52,18 +56,18 @@ public class PostDaoImpl implements PostDao {
     }
 
     @Override
-    public void save(Post post)
-            throws DbException {
+    public void save(Post post) throws DbException {
         try {
             PreparedStatement preparedStatement = this.connectionProvider.getConnection()
                     .prepareStatement(SQL_SAVE);
-            String date = String.format("%s-%s-%s", post.date().getYear() + 1900, post.date().getMonth() + 1,
-                    post.date().getDate());
-            preparedStatement.setObject(1, post.author().uuid());
-            preparedStatement.setString(2, date);
-            preparedStatement.setString(3, post.title());
-            preparedStatement.setString(4, post.content());
-            preparedStatement.setString(5, post.image());
+
+            preparedStatement.setObject(1, post.uuid()); // UUID поста
+            preparedStatement.setObject(2, post.author().uuid()); // UUID автора
+            preparedStatement.setTimestamp(3, new java.sql.Timestamp(post.date().getTime())); // Дата
+            preparedStatement.setString(4, post.title()); // Заголовок
+            preparedStatement.setString(5, post.content()); // Контент
+            preparedStatement.setString(6, post.image()); // Изображение
+
             preparedStatement.executeUpdate();
 
         } catch (SQLException e) {
@@ -122,7 +126,9 @@ public class PostDaoImpl implements PostDao {
             if (post.image() != null) {
                 PreparedStatement preparedStatement = this.connectionProvider.getConnection()
                         .prepareStatement(SQL_UPDATE);
-                String date = String.format("%s-%s-%s", post.date().getYear() + 1900, post.date().getMonth() + 1,
+                String date = String.format("%d-%02d-%02d",
+                        post.date().getYear() + 1900,
+                        post.date().getMonth() + 1,
                         post.date().getDate());
                 preparedStatement.setString(1, post.title());
                 preparedStatement.setString(2, post.content());
@@ -133,7 +139,9 @@ public class PostDaoImpl implements PostDao {
             } else {
                 PreparedStatement preparedStatement = this.connectionProvider.getConnection()
                         .prepareStatement(SQL_UPDATE_WITHOUT_IMAGE);
-                String date = String.format("%s-%s-%s", post.date().getYear() + 1900, post.date().getMonth() + 1,
+                String date = String.format("%d-%02d-%02d",
+                        post.date().getYear() + 1900,
+                        post.date().getMonth() + 1,
                         post.date().getDate());
                 preparedStatement.setString(1, post.title());
                 preparedStatement.setString(2, post.content());
@@ -153,10 +161,9 @@ public class PostDaoImpl implements PostDao {
             PreparedStatement preparedStatement = this.connectionProvider
                     .getConnection()
                     .prepareStatement(SQL_GET_BY_UUID);
-            preparedStatement.setString(1, String.valueOf(uuid));
+            preparedStatement.setString(1, uuid.toString());
             ResultSet result = preparedStatement.executeQuery();
-            boolean hasOne = result.next();
-            if (hasOne) {
+            if (result.next()) {
                 return extract(result);
             } else {
                 return null;
@@ -173,7 +180,7 @@ public class PostDaoImpl implements PostDao {
             PreparedStatement preparedStatement = this.connectionProvider
                     .getConnection()
                     .prepareStatement(SQL_GET_BY_AUTHOR);
-            preparedStatement.setString(1, String.valueOf(uuid));
+            preparedStatement.setString(1, uuid.toString());
             ResultSet result = preparedStatement.executeQuery();
             while (result.next()) {
                 posts.add(extract(result));
@@ -186,16 +193,16 @@ public class PostDaoImpl implements PostDao {
 
     @Override
     public Post extract(ResultSet result) throws DbException {
-        Post post;
         try {
-            post = new Post((UUID) result.getObject("uuid"),
-                    accountDao.getById((UUID) result.getObject("author_uuid")),
-                    result.getString("title"),
-                    result.getString("content"),
-                    result.getString("image"),
-                    (Date) result.getObject("date_of_publication"));
-            return post;
+            UUID uuid = (UUID) result.getObject("uuid");
+            UUID authorUuid = (UUID) result.getObject("author_uuid");
+            Account author = accountDao.getById(authorUuid);
+            String title = result.getString("title");
+            String content = result.getString("content");
+            String image = result.getString("image");
+            Date date = result.getDate("date");
 
+            return new Post(uuid, author, title, content, image, date);
         } catch (SQLException e) {
             throw new DbException("Can't get post from db.", e);
         }

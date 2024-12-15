@@ -8,7 +8,7 @@ $(document).ready(function() {
         ({
             type: "POST",
             data: {title: title},
-            url: "/BeerOK/search/add",
+            url: "/BookOK/search/add",
             success: function (result) {
                 $('#post-card').html(result);
             },

@@ -13,7 +13,7 @@ public class BookServiceImpl implements BookService {
 
     private BookDao bookDao;
 
-    private final String TITLE_REGEX = "[\\p{IsCyrillic}- ]+";
+    private final String TITLE_REGEX = "[\\p{L}\\s-]+";
 
     public BookServiceImpl(BookDao bookDao) {
         this.bookDao = bookDao;
